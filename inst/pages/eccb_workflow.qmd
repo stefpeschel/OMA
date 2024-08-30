@@ -11,8 +11,8 @@ TODO:
 - 
 
 THINGS TO CONSIDER
-- We should probably use same dataset
-- 
+- We should probably use same dataset. Data integration part requires multiomics data. 
+- I added idea for story but feel free to modify.
 
 PRELIMINARY SCHEDULE
 
@@ -110,31 +110,76 @@ Introduce the dataset briefly.
 
 ```{r}
 #| label: loadDataset
-data("Tito2024QMP")
-tse <- Tito2024QMP
+#| echo: false
+data("HintikkaXOData")
+
+# Get MAE object and store biomarker experiment to altExp of microbiota
+mae <- HintikkaXOData
+tse <- getWithColData(mae, 1)
+altExp(tse, "biomarkers") <- getWithColData(mae, 3)
 ```
 
 ## Bioconductor resources for microbiome data science (Leo)
 
-TreeSE
+Idea for the story:
 
-- Introduction to TreeSE
-- Transformations?
+"
+TreeSE is the primary data container used in miaverse framework.It is extension to SE.
+It works like this. mia package has methods for common operations. For instance, 
+we can tranform the data.
+"
+
 
 ## Analysis of community diversity and composition (Pande)
- - Idea: After introducing TreeSE, we can now use methods from mia.
- - What are diversity and composition?
- - How to calculate and plot alpha diversity indices?
- - How to calculate and plot PCoA(?)
- 
+
+Idea for the story:
+
+"
+After preprocessing the data, we can continue to analysis. It is common to analyze the alpha diversity
+of samples. ...
+
+To analyze similarity between samples, we can perform PCoA. ...
+"
+
 ##  Microbiome data integration (Tuomas)
 
-- Idea: Now participants know that we can utilize methods from mia. Introduce slots and show how to handle complex data.
- - reducedDim slot was briefly introduced in Pande's session. (That highlights the idea of slots hopefully since the result is the same as already calculated.)
- - Introduce agglomerateByRanks() and altExp slot
- - Add another omics to altExp and demonstrating column subsetting to show sample linkage
- - Calculate cross-association?
+Idea for the story:
+
+"
+Microbiome data is complex, which requires efficient way to handle and process
+the data. With large datasets, not only is it crucial to manage the data
+effectively, but it's also important to store and access intermediate and final
+results efficiently as it was done in previous alpha and beta diversity calculations.
+
+TreeSE offers a robust framework for organizing microbiome data, accommodating
+various layers of information, including taxonomic ranks and sample metadata.
+This structured approach facilitates easier data management and analysis.
+
+To incorporate additional omics data, the altExp slot within TreeSE can be
+utilized. This slot maintains the linkage between samples across different data
+types. For even more complex datasets, the MultiAssayExperiment framework can
+be employed, providing advanced functionality for integrating and analyzing diverse omics datasets.
+
+OMA also shows how to integrate different omics sets in analysis,
+cross-association analysis being the most simple approach.
+
+"
+
+## Microbial network analysis (Stefanie)
  
- ## Microbial network analysis (Stefanie)
- 
- ## Interactive microbiome data exploration with iSEEtree (Giulio)
+Idea for the story:
+
+"
+We performed cross-association analysis in previous session. Analyzing microbial
+networks, however, usually requires more sophisticated apporoaches. 
+
+"
+
+## Interactive microbiome data exploration with iSEEtree (Giulio)
+
+Idea for the story:
+
+"
+For interactive analysis, iSEEtree is available. It allows to perform common analyses in graphical interface.
+
+"
