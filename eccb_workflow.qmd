@@ -1,0 +1,267 @@
+# ECCB workflow {#eccb_workflow}
+
+```{r setup, echo=FALSE, results="asis"}
+library(rebook)
+chapterPreamble()
+```
+
+TODO:
+
+- rename the workflow
+- 
+
+THINGS TO CONSIDER
+- We should probably use same dataset. Data integration part requires multiomics data. 
+- I added idea for story but feel free to modify.
+
+PRELIMINARY SCHEDULE
+
+13:00-13:20 Leo
+ - Idea: Introduction and TreeSE
+ - Introduction to Bioconductor
+ - Overview of data containers
+ - Introduction to TreeSE
+13:20-13:25 short Q&A
+ - Participants have time to explore on their own
+13:25-13:30 short break
+ - Time to set up for the next session
+ 
+13:30-13:50 Pande
+ - Idea: After introducing TreeSE, we can now use methods from mia.
+ - What are diversity and composition?
+ - How to calculate and plot alpha diversity indices?
+ - How to calculate and plot PCoA(?)
+13:50-13:55 short Q&A
+ - Participants have time to explore on their own
+13:55-14:00 short break
+ - Time to set up for the next session
+ 
+14:00-14:20 Tuomas
+ - Idea: Now participants know that we can utilize methods from mia. Introduce slots and show how to handle complex data.
+ - reducedDim slot was briefly introduced in Pande's session. (That highlights the idea of slots hopefully since the result is the same as already calculated.)
+ - Introduce agglomerateByRanks() and altExp slot
+ - Add another omics to altExp and demonstrating column subsetting to show sample linkage
+ - Calculate cross-association?
+14:20-14:30 short Q&A
+ - Participants have time to explore on their own
+
+15:00-15:20 Stefanie
+ - Idea: Show what additional capabilities there are
+ - Maybe: we can calculate simple correlation network based on cross-association results (Tuomas's session) but this can be further extended?
+15:20-15:25 short Q&A
+ - Participants have time to explore on their own
+15:25-15:30 short break
+ - Time to set up for the next session
+ 
+15:30-15:50 Giulio
+ - Idea: Show what additional capabilities there are
+ - Maybe: the analyses performed earlier can be done in graphical interface?
+15:50-15:55 short Q&A
+ - Participants have time to explore on their own
+15:55-16:00 short break
+ - Time to set up for the next session
+
+
+
+## Introduction
+
+Explain the workflow: what user can find from here?
+
+## Load packages
+
+```{r}
+#| label: install
+#| output: FALSE
+# List of packages that we need
+packages <- c("ComplexHeatmap", "curatedMetagenomicData", "iSEEtree", "mia",
+              "miaViz", "scater", "shadowtext")
+
+# Get packages that are already installed
+packages_already_installed <- packages[ packages %in% installed.packages() ]
+
+# Get packages that need to be installed
+packages_need_to_install <- setdiff( packages, packages_already_installed )
+
+# Loads BiocManager into the session. Install it if it is not already installed.
+if( !require("BiocManager") ){
+    install.packages("BiocManager")
+    library("BiocManager")
+}
+
+# If there are packages that need to be installed, installs them with BiocManager
+# Updates old packages.
+if( length(packages_need_to_install) > 0 ) {
+   install(packages_need_to_install, ask = FALSE)
+}
+
+# Load all packages into session. Stop if there are packages that were not
+# successfully loaded
+pkgs_not_loaded <- !sapply(packages, require, character.only = TRUE)
+pkgs_not_loaded <- names(pkgs_not_loaded)[ pkgs_not_loaded ]
+if( length(pkgs_not_loaded) > 0 ){
+    stop(
+        "Error in loading the following packages into the session: '",
+        paste0(pkgs_not_loaded, collapse = "', '"), "'")
+}
+```
+
+## Importing data
+
+There are several openly available datasets listed in [@sec-example-data]. In
+this workflow, we will retrieve data from the curatedMetagenomicData resource.
+We'll focus on a dataset that includes both colorectal cancer (CRC) patients
+and control subjects. Our goal is to investigate whether CRC is associated
+with alterations in the gut microbiota.
+
+```{r}
+#| label: import_dataset
+
+# Study from which we want to fetch data
+study <- "GuptaA_2019"
+# Experiments that we want to fetch
+experiments <- c("pathway_abundance", "relative_abundance") |>
+    paste0(collapse = "|")
+search_pattern <- paste0(study, ".(", experiments, ")")
+
+# Fetch data
+data_list <- curatedMetagenomicData(
+    search_pattern, dryrun = FALSE, counts = TRUE, rownames = "short")
+
+# The assay name for taxonomy profile is incorrect since we have counts, not
+# relative abundances
+exp_ind <- grep("relative_abundance", names(data_list))[[1]]
+tse <- data_list[[exp_ind]]
+assayNames(tse) <- "counts"
+data_list[[exp_ind]] <- tse
+
+# For pathway data, extract pathway information from rownames and add them to
+# rowData
+exp_ind <- grep("pathway", names(data_list))[[1]]
+tse <- data_list[[exp_ind]]
+rowData(tse)[["full_name"]] <- rownames(tse)
+rowData(tse)[["pathway"]] <- sub("\\|.*", "", rowData(tse)[["full_name"]])
+data_list[[exp_ind]] <- tse
+
+# Get taxonomy object
+exp_ind <- grep("relative_abundance", names(data_list))[[1]]
+tse <- data_list[[exp_ind]]
+tse
+```
+
+```{r}
+#| label: agglomeration
+
+tse_family <- agglomerateByRank(tse, rank = "family")
+```
+
+```{r}
+#| label: transformation
+
+tse <- transformAssay(tse, method = "relabundance")
+tse <- transformAssay(tse, method = "clr", pseudocount = 1)
+
+tse_family <- transformAssay(tse_family, method = "relabundance")
+tse_family <- transformAssay(tse_family, method = "clr", pseudocount = 1)
+```
+
+
+## Bioconductor resources for microbiome data science (Leo)
+
+Idea for the story:
+
+"
+TreeSE is the primary data container used in miaverse framework.It is extension to SE.
+It works like this. mia package has methods for common operations. For instance, 
+we can tranform the data.
+"
+
+
+## Analysis of community diversity and composition (Pande)
+
+Idea for the story:
+
+"
+After preprocessing the data, we can continue to analysis. It is common to analyze the alpha diversity
+of samples. ...
+
+To analyze similarity between samples, we can perform PCoA. ...
+"
+
+##  Microbiome data integration (Tuomas)
+
+Linking to Pande's session
+
+"
+
+As we show, CRC patients seems to have altered microbiota. However, that is only association and does not tell about causality or mechanisms. To study complex mechanisms, we need more data. --> More data, we need efficient ways to handle data from multiple experiments. --> Show altExp can be utilized to handle multiple experiments
+
+We show cross-association analysis; very simple "data integrtation" method. More in OMA.
+
+"
+
+```{r}
+altExp(tse, "family") <- tse_family
+```
+
+
+```{r}
+altExp(tse, "pathway") <- data_list[[1]]
+
+altExp(tse, "pathway") <- agglomerateByVariable(altExp(tse, "pathway"), by = "rows", "pathway")
+altExp(tse, "pathway") <- agglomerateByPrevalence(altExp(tse, "pathway"), assay.type = "pathway_abundance", prevalence = 0.2, detection = 0.001)
+altExp(tse, "pathway") <- transformAssay(altExp(tse, "pathway"), assay.type = "pathway_abundance", method = "clr", pseudocount = TRUE)
+
+
+res <- getCrossAssociation(
+    tse,
+    altexp1 = "family", "pathway",
+    assay.type1 = "clr", assay.type2 = "clr", mode = "matrix", test.signif = TRUE)
+
+
+# Function for marking significant correlations with "X"
+add_signif <- function(j, i, x, y, width, height, fill) {
+    # If the p-value is under threshold
+    if( !is.na(res$p_adj[i, j]) & res$p_adj[i, j] < 0.05 ){
+        # Print "X"
+        grid.shadowtext(
+            sprintf("%s", "X"), x, y, gp = gpar(fontsize = 8, col = "#f5f5f5"))
+    }
+}
+
+# Create a heatmap
+p <- Heatmap(
+    res$cor,
+    # Print values to cells
+    cell_fun = add_signif,
+    heatmap_legend_param = list(
+     title = "correlation", legend_height = unit(5, "cm")),
+    column_names_rot = 45
+)
+p
+```
+
+"Now we have calculated cross-association between microbes and predicted metabolic pathways. As seen, certain bacteria seems to be responsible for certain metabolic acitivity."
+
+
+## Microbial network analysis (Stefanie)
+ 
+Idea for the story:
+
+"
+We performed cross-association analysis in previous session. Analyzing microbial
+networks, however, usually requires more sophisticated apporoaches. 
+
+"
+
+## Interactive microbiome data exploration with iSEEtree (Giulio)
+
+Idea for the story:
+
+"
+For interactive analysis, iSEEtree is available. It allows to perform common analyses in graphical interface.
+
+"
+
+```{r}
+iSEE(tse_family)
+```
