@@ -73,7 +73,7 @@ Explain the workflow: what user can find from here?
 #| label: install
 #| output: FALSE
 # List of packages that we need
-packages <- c("mia",  "miaViz", "scater")
+packages <- c("ComplexHeatmap", "mia",  "miaViz", "scater", "shadowtext")
 
 # Get packages that are already installed
 packages_already_installed <- packages[ packages %in% installed.packages() ]
@@ -106,18 +106,63 @@ if( length(pkgs_not_loaded) > 0 ){
 
 ## Importing data
 
-Introduce the dataset briefly.
+There are several openly available datasets listed in [@sec-example-data]. In
+this workflow, we will retrieve data from the curatedMetagenomicData resource.
+We'll focus on a dataset that includes both colorectal cancer (CRC) patients
+and control subjects. Our goal is to investigate whether CRC is associated
+with alterations in the gut microbiota.
 
 ```{r}
-#| label: loadDataset
-#| echo: false
-data("HintikkaXOData")
+#| label: import_dataset
 
-# Get MAE object and store biomarker experiment to altExp of microbiota
-mae <- HintikkaXOData
-tse <- getWithColData(mae, 1)
-altExp(tse, "biomarkers") <- getWithColData(mae, 3)
+# Study from which we want to fetch data
+study <- "GuptaA_2019"
+# Experiments that we want to fetch
+experiments <- c("pathway_abundance", "relative_abundance") |>
+    paste0(collapse = "|")
+search_pattern <- paste0(study, ".(", experiments, ")")
+
+# Fetch data
+data_list <- curatedMetagenomicData(
+    search_pattern, dryrun = FALSE, counts = TRUE, rownames = "short")
+
+# The assay name for taxonomy profile is incorrect since we have counts, not
+# relative abundances
+exp_ind <- grep("relative_abundance", names(data_list))[[1]]
+tse <- data_list[[exp_ind]]
+assayNames(tse) <- "counts"
+data_list[[exp_ind]] <- tse
+
+# For pathway data, extract pathway information from rownames and add them to
+# rowData
+exp_ind <- grep("pathway", names(data_list))[[1]]
+tse <- data_list[[exp_ind]]
+rowData(tse)[["full_name"]] <- rownames(tse)
+rowData(tse)[["pathway"]] <- sub("\\|.*", "", rowData(tse)[["full_name"]])
+data_list[[exp_ind]] <- tse
+
+# Get taxonomy object
+exp_ind <- grep("relative_abundance", names(data_list))[[1]]
+tse <- data_list[[exp_ind]]
+tse
 ```
+
+```{r}
+#| label: agglomeration
+
+tse_family <- agglomerateByRank(tse, rank = "family")
+```
+
+```{r}
+#| label: transformation
+
+tse <- transformAssay(tse, method = "relabundance")
+tse <- transformAssay(tse, method = "clr", pseudocount = 1)
+
+tse_family <- transformAssay(tse_family, method = "relabundance")
+tse_family <- transformAssay(tse_family, method = "clr", pseudocount = 1)
+```
+
 
 ## Bioconductor resources for microbiome data science (Leo)
 
@@ -143,27 +188,59 @@ To analyze similarity between samples, we can perform PCoA. ...
 
 ##  Microbiome data integration (Tuomas)
 
-Idea for the story:
+Linking to Pande's session
 
 "
-Microbiome data is complex, which requires efficient way to handle and process
-the data. With large datasets, not only is it crucial to manage the data
-effectively, but it's also important to store and access intermediate and final
-results efficiently as it was done in previous alpha and beta diversity calculations.
 
-TreeSE offers a robust framework for organizing microbiome data, accommodating
-various layers of information, including taxonomic ranks and sample metadata.
-This structured approach facilitates easier data management and analysis.
+As we show, CRC patients seems to have altered microbiota. However, that is only association and does not tell about causality or mechanisms. To study complex mechanisms, we need more data. --> More data, we need efficient ways to handle data from multiple experiments. --> Show altExp can be utilized to handle multiple experiments
 
-To incorporate additional omics data, the altExp slot within TreeSE can be
-utilized. This slot maintains the linkage between samples across different data
-types. For even more complex datasets, the MultiAssayExperiment framework can
-be employed, providing advanced functionality for integrating and analyzing diverse omics datasets.
-
-OMA also shows how to integrate different omics sets in analysis,
-cross-association analysis being the most simple approach.
+We show cross-association analysis; very simple "data integrtation" method. More in OMA.
 
 "
+
+```{r}
+altExp(tse, "family") <- tse_family
+```
+
+
+```{r}
+altExp(tse, "pathway") <- data_list[[1]]
+
+altExp(tse, "pathway") <- agglomerateByVariable(altExp(tse, "pathway"), by = "rows", "pathway")
+altExp(tse, "pathway") <- agglomerateByPrevalence(altExp(tse, "pathway"), assay.type = "pathway_abundance", prevalence = 0.2, detection = 0.001)
+altExp(tse, "pathway") <- transformAssay(altExp(tse, "pathway"), assay.type = "pathway_abundance", method = "clr", pseudocount = TRUE)
+
+
+res <- getCrossAssociation(
+    tse,
+    altexp1 = "family", "pathway",
+    assay.type1 = "clr", assay.type2 = "clr", mode = "matrix", test.signif = TRUE)
+
+
+# Function for marking significant correlations with "X"
+add_signif <- function(j, i, x, y, width, height, fill) {
+    # If the p-value is under threshold
+    if( !is.na(res$p_adj[i, j]) & res$p_adj[i, j] < 0.05 ){
+        # Print "X"
+        grid.shadowtext(
+            sprintf("%s", "X"), x, y, gp = gpar(fontsize = 8, col = "#f5f5f5"))
+    }
+}
+
+# Create a heatmap
+p <- Heatmap(
+    res$cor,
+    # Print values to cells
+    cell_fun = add_signif,
+    heatmap_legend_param = list(
+     title = "correlation", legend_height = unit(5, "cm")),
+    column_names_rot = 45
+)
+p
+```
+
+"Now we have calculated cross-association between microbes and predicted metabolic pathways. As seen, certain bacteria seems to be responsible for certain metabolic acitivity."
+
 
 ## Microbial network analysis (Stefanie)
  
