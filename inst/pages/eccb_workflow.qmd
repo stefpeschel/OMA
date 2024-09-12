@@ -65,15 +65,39 @@ PRELIMINARY SCHEDULE
 
 ## Introduction
 
-Explain the workflow: what user can find from here?
+In this workflow, we demonstrate how to analyze data from publicly available
+microbiome resources using Bioconductor methods. We will cover essential data
+wrangling steps, explore alpha and beta diversity metrics, and introduce the
+fundamentals of data integration and microbial network analysis. Additionally,
+we will explore how to utilize the tools through a graphical interface.
 
-## Load packages
+## Bioconductor resources for microbiome data science (Leo)
+
+Idea for the story:
+
+"
+TreeSE is the primary data container used in miaverse framework.It is extension to SE.
+It works like this. mia package has methods for common operations. For instance, 
+we can tranform the data.
+"
+
+### Load packages
+
+First, we load the required packages into the session. The following script
+ensures that any packages not already installed are automatically installed.
 
 ```{r}
 #| label: install
 #| output: FALSE
 # List of packages that we need
-packages <- c("ComplexHeatmap", "mia",  "miaViz", "scater", "shadowtext")
+packages <- c(
+    "ComplexHeatmap",
+    # "CuratedMetagenomicData",
+    "mia",
+    "miaViz",
+    "scater",
+    "shadowtext"
+    )
 
 # Get packages that are already installed
 packages_already_installed <- packages[ packages %in% installed.packages() ]
@@ -104,13 +128,17 @@ if( length(pkgs_not_loaded) > 0 ){
 }
 ```
 
-## Importing data
+If you encountered an error, install packages manually.
+
+### Importing data
 
 There are several openly available datasets listed in [@sec-example-data]. In
 this workflow, we will retrieve data from the curatedMetagenomicData resource.
 We'll focus on a dataset that includes both colorectal cancer (CRC) patients
 and control subjects. Our goal is to investigate whether CRC is associated
 with alterations in the gut microbiota.
+
+Let's fetch the data from the database.
 
 ```{r}
 #| label: import_dataset
@@ -126,54 +154,51 @@ search_pattern <- paste0(study, ".(", experiments, ")")
 data_list <- curatedMetagenomicData(
     search_pattern, dryrun = FALSE, counts = TRUE, rownames = "short")
 
+# Add new names
+names(data_list) <- c("pathway", "taxonomy")
+
 # The assay name for taxonomy profile is incorrect since we have counts, not
 # relative abundances
-exp_ind <- grep("relative_abundance", names(data_list))[[1]]
-tse <- data_list[[exp_ind]]
+tse <- data_list[["taxonomy"]]
 assayNames(tse) <- "counts"
-data_list[[exp_ind]] <- tse
+data_list[["taxonomy"]] <- tse
 
 # For pathway data, extract pathway information from rownames and add them to
 # rowData
-exp_ind <- grep("pathway", names(data_list))[[1]]
-tse <- data_list[[exp_ind]]
+tse <- data_list[["pathway"]]
 rowData(tse)[["full_name"]] <- rownames(tse)
 rowData(tse)[["pathway"]] <- sub("\\|.*", "", rowData(tse)[["full_name"]])
-data_list[[exp_ind]] <- tse
+data_list[["pathway"]] <- tse
 
 # Get taxonomy object
-exp_ind <- grep("relative_abundance", names(data_list))[[1]]
-tse <- data_list[[exp_ind]]
+tse <- data_list[["taxonomy"]]
 tse
 ```
 
-```{r}
-#| label: agglomeration
+The output is a `TreeSummarizedExperiment` (`TreeSE`) object. For details on
+how to handle and access the data, refer to [@sec-containers].
 
+### Preprocess
+
+A common step in microbiome workflows is agglomeration, where we summarize
+data at specific taxonomy ranks. Additionally, preprocessing involves
+transforming the data to address the unique characteristics of microbiome
+profiling data, for instance. Details on agglomeration and transformation are
+covered in [@sec-agglomeration] and [@sec-assay-transform], respectively.
+
+```{r}
+#| label: preprocess
+
+# Agglomerate data
 tse_family <- agglomerateByRank(tse, rank = "family")
-```
 
-```{r}
-#| label: transformation
-
+# Transform the main TreeSE
 tse <- transformAssay(tse, method = "relabundance")
 tse <- transformAssay(tse, method = "clr", pseudocount = 1)
-
+# Transform agglomerated data
 tse_family <- transformAssay(tse_family, method = "relabundance")
 tse_family <- transformAssay(tse_family, method = "clr", pseudocount = 1)
 ```
-
-
-## Bioconductor resources for microbiome data science (Leo)
-
-Idea for the story:
-
-"
-TreeSE is the primary data container used in miaverse framework.It is extension to SE.
-It works like this. mia package has methods for common operations. For instance, 
-we can tranform the data.
-"
-
 
 ## Analysis of community diversity and composition (Pande)
 
@@ -188,32 +213,119 @@ To analyze similarity between samples, we can perform PCoA. ...
 
 ##  Microbiome data integration (Tuomas)
 
-Linking to Pande's session
+As demonstrated, CRC patients appear to have altered microbiota. However, this
+observation only indicates an association and does not imply causality or reveal
+underlying mechanisms. To explore complex mechanisms, we often need more comprehensive
+data. Efficiently handling data from multiple experiments requires integrating
+these datasets into a unified data container. Bioconductor offers two approaches
+for this:
 
-"
+ - Using the `altExp` slot within the `TreeSE` object, which is a straightforward method.
+ - Employing `MultiAssayExperiment`, a more general and flexible approach, though it comes with a more complex data structure compared to `TreeSE`.
 
-As we show, CRC patients seems to have altered microbiota. However, that is only association and does not tell about causality or mechanisms. To study complex mechanisms, we need more data. --> More data, we need efficient ways to handle data from multiple experiments. --> Show altExp can be utilized to handle multiple experiments
+For detailed information on both approaches, refer to [@sec-containers]. In this
+tutorial, we will focus on the simpler method using the `altExp` slot.
 
-We show cross-association analysis; very simple "data integrtation" method. More in OMA.
+The data fetched at the beginning of this workflow is a `list` containing
+multiple experiments, each represented as a unique `(Tree)SE` object. Managing
+this list and the connections between samples can be error-prone and cumbersome.
+To simplify this, we can use the `altExp` slot to handle the bookkeeping.
+Let’s start by checking which experiments are available:
 
-"
+```{r}
+#| label: show_experiments
+
+names(data_list)
+```
+
+As we see, we have metabolic pathway predictions in addition to taxonomic
+profiling. We can add the entire list of experiments to the `altExp` slot.
+
+```{r}
+#| label: add_altexp
+
+altExps(tse) <- data_list
+tse
+```
+
+With the `altExp` slot now populated, you can access the data using the
+`altExp()` function and specify which experiment you want to retrieve.
+
+```{r}
+#| label: access_altxp
+
+altExp(tse, "pathway")
+```
+
+As mentioned earlier, the advantage of the `altExp` slot is that it handles
+sample linkages for us. For example, if we select a subset of data, the object
+automatically subsets all associated experiments accordingly.
+
+For example, let’s select only the samples from senior patients.
+
+```{r}
+#| label: subset_altexp
+
+tse_sub <- tse[ , tse$age_category == "senior"]
+tse_sub
+
+# Check that all sample names still match
+all( colnames(altExp(tse_sub, "pathway")) == colnames(tse_sub) )
+```
+
+Now, we can see that the data has been successfully subsetted, with all sample
+names matching across experiments.
+
+In addition to adding the entire list, we can also add individual experiments.
+Let’s add the agglomerated data separately to keep the whole dataset organized.
 
 ```{r}
 altExp(tse, "family") <- tse_family
+tse
 ```
 
+Now that the entire dataset is well-organized and in one place, let’s dive
+into analyzing the interconnections between experiments. Specifically, we’ll
+examine whether the abundance of certain bacteria is associated with specific
+metabolic activity pathway.
+
+We’ll perform a simple cross-association analysis to explore these
+relationships. First, we’ll preprocess the functional annotation data by
+agglomerating the pathways based on each pathway's function, and then further by
+prevalence.
 
 ```{r}
-altExp(tse, "pathway") <- data_list[[1]]
+#| label: agglomerate_func
 
-altExp(tse, "pathway") <- agglomerateByVariable(altExp(tse, "pathway"), by = "rows", "pathway")
-altExp(tse, "pathway") <- agglomerateByPrevalence(altExp(tse, "pathway"), assay.type = "pathway_abundance", prevalence = 0.2, detection = 0.001)
-altExp(tse, "pathway") <- transformAssay(altExp(tse, "pathway"), assay.type = "pathway_abundance", method = "clr", pseudocount = TRUE)
+# Agglomerate based on pathways function
+altExp(tse, "pathway_func") <- agglomerateByVariable(altExp(tse, "pathway"), by = "rows", "pathway")
+# Agglomerate based on prevalence
+altExp(tse, "pathway_prev") <- agglomerateByPrevalence(altExp(tse, "pathway_func"), assay.type = "pathway_abundance", prevalence = 0.2, detection = 0.001)
+```
 
+The data now includes the most prevalent pathways, each representing a single
+metabolic activity. Next, we apply a transformation as the final preprocessing
+step for our functional data.
 
+```{r}
+#| label: transform_func
+
+altExp(tse, "pathway_prev") <- transformAssay(altExp(tse, "pathway_prev"), assay.type = "pathway_abundance", method = "clr", pseudocount = 1)
+
+altExp(tse, "pathway_prev")
+```
+
+We’re now ready to perform the cross-association analysis. We will examine the
+associations between microbial families and the most abundant pathways. To
+visualize the results, we’ll use a heatmap.
+
+```{r}
+#| label: cross_association
+
+# Perform cross-associaton
 res <- getCrossAssociation(
     tse,
-    altexp1 = "family", "pathway",
+    altexp1 = "family", "pathway_prev",
     assay.type1 = "clr", assay.type2 = "clr", mode = "matrix", test.signif = TRUE)
 
 
@@ -234,13 +346,22 @@ p <- Heatmap(
     cell_fun = add_signif,
     heatmap_legend_param = list(
      title = "correlation", legend_height = unit(5, "cm")),
-    column_names_rot = 45
+    column_names_rot = 45, column_names_max_height = unit(20, "cm")
 )
 p
 ```
 
-"Now we have calculated cross-association between microbes and predicted metabolic pathways. As seen, certain bacteria seems to be responsible for certain metabolic acitivity."
+Enterobacteriaceae shows a positive correlation with certain pathways
+(indicated by x, which denotes statistical significance with an adjusted
+p-value < 0.05) that other microbial families are negatively correlated with.
+For example, L-isoleucine biosynthesis is a pathway that demonstrates this kind
+of association.
 
+For more information on data integration, see the following sections:
+
+ - [@sec-cross-correlation]
+ - [@sec-multiassay_ordination]
+ - [@sec-multi-omics-integration]
 
 ## Microbial network analysis (Stefanie)
  
