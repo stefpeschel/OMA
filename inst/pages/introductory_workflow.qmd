@@ -1,6 +1,6 @@
 ## Introductory
 
-**Version:** 2.0
+**Version:** 2.1
 
 ```{r}
 #| label: setup
@@ -9,8 +9,6 @@
 library(rebook)
 chapterPreamble()
 ```
-
-<div id="workflow">
 
 ::: {#translate}
 <a href="introductory_workflow_french_version.qmd"><img src="figures/flags/France_flag.png" alt="French flag" class="flag"/> **French** </a> <a href="introductory_workflow_dutch_version.qmd"><img src="figures/flags/Netherland_flag.jpg" alt="Netherland flag" class="flag"/> **Dutch** </a>
@@ -26,12 +24,11 @@ foundational steps of microbiome analysis using _miaverse_. These steps are
 applicable to almost any of your projects and will help you understand the
 fundamental concepts that will skyrocket 🚀 your future microbiome analyses.
 
-In this workflow, we cover:
+In this workflow, we cover basics of:
 
     - Data wrangling and transformations
-    - Basic exploration
-    - Alpha diversity analysis
-    - Beta diversity analysis
+    - Exploration
+    - Alpha and beta diversity
 
 ## Load packages
 
@@ -88,16 +85,16 @@ built-in datasets provided by mia, which you can find here: @sec-example-data.
 In this tutorial, we'll be using the @Tengeler2020 dataset. In the study,
 they explored the impact of altered microbiomes on brain
 structure, specifically comparing patients with ADHD
-(Attention Deficit Hyperactivity Disorder) to controls. Let's load this dataset
-into our R environment:
+(Attention Deficit Hyperactivity Disorder) to controls (see more information
+on this dataset from
+[here](https://microbiome.github.io/outreach/tengeler2020_presentation.html#/title-slide)).
+Let's load this dataset into our R environment:
 
 ```{r}
 #| label: loadDataset
 data("Tengeler2020", package = "mia")
 tse <- Tengeler2020
 ```
-
-<hr>
 
 ## Subsetting and accessing the data
 
@@ -163,14 +160,6 @@ rd
 Here `rowData(tse)` returns a DataFrame with 151 rows and 7 columns. Each
 row represents an organism and each column a taxonomic level.
 
-For a recap on the structure of common data containers, see [@sec-containers].
-Also, please take a look at
-figure below.
-
-![1. Storing microbial data: the structure of a TreeSummarizedExperiment](figures/TSE-structure.svg){.lightbox .contentimg}
-
-<hr>
-
 ## Data wrangling
 
 ### Agglomerating data
@@ -190,9 +179,7 @@ tse_phylum
 ```
 
 Great! Now, our data is aggregated to the taxonomic information up to the Phylum
-level, allowing the analysis to be focused on this specific rank. Although we
-won't use the agglomerated data in the rest of the workflow, all the code below
-can also be applied to it.
+level, allowing the analysis to be focused on this specific rank.
 
 ### Transformation
 
@@ -267,7 +254,6 @@ then create a graph to visualize this.
 ```{r}
 #| label: plotColdata
 p <- plotColData(tse, x = "patient_status", y = "faith")
-p <- p + labs(title = "Faith plot")
 p
 ```
 
@@ -277,8 +263,6 @@ Faith's index only tell us about the diversity within individual samples
 and do not account for the differences between samples or groups. To
 understand how microbial communities vary between different samples — for
 instance, between ADHD patients and controls — we need to examine beta diversity.
-
-<hr>
 
 ## Community dissimilarity
 
@@ -293,7 +277,8 @@ To explore these dissimilarities, we use Principal Coordinate Analysis (PCoA),
 a technique that reduces the complexity of high-dimensional data by projecting
 it into a lower-dimensional space while preserving the dissimilarities
 (or distances) between samples. This enables us to visualize the relationships
-and differences between samples in a simplified manner.
+and differences between samples in a simplified manner. For more information,
+refer to [@sec-community-similarity].
 
 In this analysis, we use UniFrac dissimilarity, which takes into account
 the phylogenetic relationships among taxa. UniFrac measures the phylogenetic
@@ -317,8 +302,8 @@ tse <- runMDS(
     )
 ```
 
-In order to visualize this newly generated projection, we can apply
-`scater::plotReducedDim()`.
+The results are stored in `reducedDim` slot. In order to visualize this newly
+generated projection, we can apply `scater::plotReducedDim()`.
 
 ```{r}
 #| label: showPCoA
@@ -328,6 +313,7 @@ p <- plotReducedDim(
     colour_by = "patient_status",
     point_size = 3
     )
+p <- p + labs(title = "Principal Coordinate Analysis")
 p
 ```
 
@@ -338,7 +324,3 @@ profiles differ between ADHD patients and controls.
 To further explore the factors driving these differences in microbial profiles,
 we can perform a differential abundance analysis, for instance
 (see [@sec-differential-abundance]).
-
-<hr>
-
-</div>
